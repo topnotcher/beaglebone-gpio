@@ -53,7 +53,7 @@ static void gpio_mmap() {
 		assert(gpio[i] != MAP_FAILED);
 
 		// enable clocks to GPIO and spin while not fully functional
-		uint32_t *clkctrl= (uint32_t*)(cm+GPIO_CLKCTRL[i]);
+		volatile uint32_t *clkctrl= (uint32_t*)(cm+GPIO_CLKCTRL[i]);
 		*clkctrl = (*clkctrl & (~GPIO_CLKCTRL_MODULEMODE_BM)) | GPIO_CLKCTRL_MODULEMODE_ENABLE;
 		while ( ((*clkctrl) & GPIO_CLKCTRL_IDLEST_BM) != GPIO_CLKCTRL_IDLEST_FUNCTIONAL );
 
