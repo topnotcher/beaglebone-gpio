@@ -18,6 +18,10 @@ static void kill_stupid_kernel_led_driver(void);
 static void sigint_handler(int s);
 static void leds_off(void);
 
+#define LED_GPIO_BANK 1
+#define LED_USER0_BIT 21
+
+
 GPIO_t  *gpio[GPIO_NUM_BANKS];
 volatile sig_atomic_t running = 1;
 
@@ -87,22 +91,22 @@ static void init_leds() {
 
 	//usr0...3 = gpio1_21, 22, 23, 24
 	for (int i = 0; i < 4; ++i) {
-		gpio[1]->OE &= ~(1<<(21+i));
-		gpio[1]->CLEARDATAOUT = 1<<(21+i);
+		gpio[LED_GPIO_BANK]->OE &= ~(1<<(LED_USER0_BIT+i));
+		gpio[LED_GPIO_BANK]->CLEARDATAOUT = 1<<(LED_USER0_BIT+i);
 	}
 }
 
 static void blink_leds() {
 	for (int i = 0; i < 4; ++i) {
-		gpio[1]->SETDATAOUT |= 1<<(21+i);
+		gpio[LED_GPIO_BANK]->SETDATAOUT |= 1<<(LED_USER0_BIT+i);
 		sleep(1);
-		gpio[1]->CLEARDATAOUT = 1<<(21+i);
+		gpio[LED_GPIO_BANK]->CLEARDATAOUT = 1<<(LED_USER0_BIT+i);
 	}
 }
 
 static void leds_off() {
 	for (int i = 0; i < 4; ++i)
-		gpio[1]->CLEARDATAOUT = 1<<(21+i);
+		gpio[LED_GPIO_BANK]->CLEARDATAOUT = 1<<(LED_USER0_BIT+i);
 }
 
 static void sigint_handler(int s) {
