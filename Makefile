@@ -1,2 +1,2 @@
 all:
-	gcc --std=c99 mmaptest.c -o gpio
+	gcc --std=c99 gpio.c -o gpio

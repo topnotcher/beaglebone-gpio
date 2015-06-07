@@ -7,9 +7,7 @@
 #include <stddef.h>
 #include <assert.h>
 #include <unistd.h>
-#include "mmtest.h"
-
-GPIO_t* gpio[NUM_GPIO_BANKS]; 
+#include "gpio.h"
 
 static void gpio_mmap(void);
 static void gpio_munmap(void);
@@ -20,6 +18,7 @@ static void kill_stupid_kernel_led_driver(void);
 static void sigint_handler(int s);
 static void leds_off(void);
 
+GPIO_t  *gpio[GPIO_NUM_BANKS];
 volatile sig_atomic_t running = 1;
 
 int main (void) {
@@ -29,8 +28,8 @@ int main (void) {
 	signal(SIGINT, sigint_handler);
 
 	while (running)
-		blink_leds();	
-	
+		blink_leds();
+
 	leds_off();
 	gpio_munmap();
 	return 0;
@@ -47,12 +46,12 @@ static void verify_gpio_map() {
 
 static void gpio_mmap() {
 	int fd = open("/dev/mem", O_RDWR);
-	uint8_t *cm = mmap(NULL, CM_PER_MEM_SIZE, PROT_READ | PROT_WRITE, MAP_SHARED, fd, CM_OFFSET);
+	uint8_t *cm = mmap(NULL, CM_PER_SIZE, PROT_READ | PROT_WRITE, MAP_SHARED, fd, CM_OFFSET);
 
-	for (int i = 0; i < NUM_GPIO_BANKS; ++i) {
+	for (int i = 0; i < GPIO_NUM_BANKS; ++i) {
 		gpio[i] = mmap(NULL, GPIO_MEM_SIZE, PROT_READ | PROT_WRITE, MAP_SHARED, fd, GPIO_ADDRS[i]) ;
 		assert(gpio[i] != MAP_FAILED);
-		
+
 		// enable clocks to GPIO and spin while not fully functional
 		uint32_t *clkctrl= (uint32_t*)(cm+GPIO_CLKCTRL[i]);
 		*clkctrl = (*clkctrl & (~GPIO_CLKCTRL_MODULEMODE_BM)) | GPIO_CLKCTRL_MODULEMODE_ENABLE;
@@ -61,20 +60,20 @@ static void gpio_mmap() {
 		// ungate clocks (page 4892)
 		gpio[i]->CTRL &= (~0x01) | (~0x06);
 	}
-	
-	munmap(cm, CM_PER_MEM_SIZE);
+
+	munmap(cm, CM_PER_SIZE);
 	close(fd);
 }
 
 static void gpio_munmap() {
-	for (int i = 0; i < NUM_GPIO_BANKS; ++i)
+	for (int i = 0; i < GPIO_NUM_BANKS; ++i)
 		munmap(gpio[i], GPIO_MEM_SIZE);
 }
 
 static void kill_stupid_kernel_led_driver() {
 	char path[] = "/sys/class/leds/beaglebone:green:usr_/trigger";
 	char *led = strstr(path, "_");
-	
+
 	for (int i = 0; i < 4; ++i) {
 		*led = 0x30+i;
 		FILE *fd = fopen(path, "w");
@@ -98,7 +97,7 @@ static void blink_leds() {
 		gpio[1]->SETDATAOUT |= 1<<(21+i);
 		sleep(1);
 		gpio[1]->CLEARDATAOUT = 1<<(21+i);
-	}	
+	}
 }
 
 static void leds_off() {
