@@ -104,16 +104,16 @@ static int gpio_init(void) {
 		return errno;
 	}
 
-	ret = gpio_clock_enable(fd);
+	ret = gpio_mmap(fd);
 	if (ret) {
-		fprintf(stderr, "failed to enable gpio clocks: %s\n", strerror(errno));
+		fprintf(stderr, "failed to mmap gpio banks: %s\n", strerror(errno));
 		status = errno;
 		goto ret_close;
 	}
 
-	ret = gpio_mmap(fd);
+	ret = gpio_clock_enable(fd);
 	if (ret) {
-		fprintf(stderr, "failed to mmap gpio banks: %s\n", strerror(errno));
+		fprintf(stderr, "failed to enable gpio clocks: %s\n", strerror(errno));
 		status = errno;
 		goto ret_close;
 	}
