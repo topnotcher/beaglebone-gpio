@@ -1,4 +1,5 @@
 #include <sys/mman.h>
+#include <errno.h>
 #include <signal.h>
 #include <stdint.h>
 #include <fcntl.h>
@@ -9,7 +10,9 @@
 #include <unistd.h>
 #include "gpio.h"
 
-static void gpio_mmap(void);
+static int gpio_mmap(int fd);
+static int gpio_clock_enable(int fd);
+static int gpio_init(void);
 static void gpio_munmap(void);
 static void verify_gpio_map(void);
 static void init_leds(void);
@@ -21,13 +24,18 @@ static void leds_off(void);
 #define LED_GPIO_BANK 1
 #define LED_USER0_BIT 21
 
-
 GPIO_t  *gpio[GPIO_NUM_BANKS];
 volatile sig_atomic_t running = 1;
 
 int main (void) {
 	verify_gpio_map();
-	gpio_mmap();
+	int ret = gpio_init();
+
+	if (ret) {
+		fprintf(stderr, "Failed to initialize GPIO\n");
+		return ret;
+	}
+
 	init_leds();
 	signal(SIGINT, sigint_handler);
 
@@ -48,30 +56,71 @@ static void verify_gpio_map() {
 	assert( offsetof(GPIO_t, CLEARDATAOUT) == 0x190 );
 }
 
-static void gpio_mmap() {
-	int fd = open("/dev/mem", O_RDWR);
-	uint8_t *cm = mmap(NULL, CM_PER_SIZE, PROT_READ | PROT_WRITE, MAP_SHARED, fd, CM_OFFSET);
-
+static int gpio_mmap(int fd) {
 	for (int i = 0; i < GPIO_NUM_BANKS; ++i) {
-		gpio[i] = mmap(NULL, GPIO_MEM_SIZE, PROT_READ | PROT_WRITE, MAP_SHARED, fd, GPIO_ADDRS[i]) ;
-		assert(gpio[i] != MAP_FAILED);
+		gpio[i] = mmap(NULL, GPIO_MEM_SIZE, PROT_READ | PROT_WRITE, MAP_SHARED, fd, GPIO_ADDRS[i]);
 
-		// enable clocks to GPIO and spin while not fully functional
-		volatile uint32_t *clkctrl= (uint32_t*)(cm+GPIO_CLKCTRL[i]);
-		*clkctrl = (*clkctrl & (~GPIO_CLKCTRL_MODULEMODE_BM)) | GPIO_CLKCTRL_MODULEMODE_ENABLE;
-		while ( ((*clkctrl) & GPIO_CLKCTRL_IDLEST_BM) != GPIO_CLKCTRL_IDLEST_FUNCTIONAL );
-
-		// ungate clocks (page 4892)
-		gpio[i]->CTRL &= (~0x01) | (~0x06);
+		if (gpio[i] == MAP_FAILED)
+			return errno;
 	}
 
-	munmap(cm, CM_PER_SIZE);
-	close(fd);
+	return 0;
 }
 
 static void gpio_munmap() {
 	for (int i = 0; i < GPIO_NUM_BANKS; ++i)
 		munmap(gpio[i], GPIO_MEM_SIZE);
+}
+
+static int gpio_clock_enable(int fd) {
+	uint8_t *cm = mmap(NULL, CM_PER_SIZE, PROT_READ | PROT_WRITE, MAP_SHARED, fd, CM_OFFSET);
+
+	if (cm == MAP_FAILED)
+		return errno;
+
+	for (int i = 0; i < GPIO_NUM_BANKS; ++i) {
+		// enable clocks to GPIO and spin while not fully functional
+		volatile uint32_t *clkctrl= (uint32_t*)(cm+GPIO_CLKCTRL[i]);
+		*clkctrl &= ~GPIO_CLKCTRL_MODULEMODE_BM;
+		*clkctrl |= GPIO_CLKCTRL_MODULEMODE_ENABLE;
+
+		while ( ((*clkctrl) & GPIO_CLKCTRL_IDLEST_BM) != GPIO_CLKCTRL_IDLEST_FUNCTIONAL ) ;
+
+		// ungate clock (page 4892)
+		gpio[i]->CTRL &= (~0x01) | (~0x06);
+	}
+
+	munmap(cm, CM_PER_SIZE);
+	return 0;
+}
+
+static int gpio_init(void) {
+	int fd = open("/dev/mem", O_RDWR);
+	int status = 0;
+	int ret;
+
+	if (fd == -1) {
+		fprintf(stderr, "failed to open /dev/mem: %s\n", strerror(errno));
+		return errno;
+	}
+
+	ret = gpio_clock_enable(fd);
+	if (ret) {
+		fprintf(stderr, "failed to enable gpio clocks: %s\n", strerror(errno));
+		status = errno;
+		goto ret_close;
+	}
+
+	ret = gpio_mmap(fd);
+	if (ret) {
+		fprintf(stderr, "failed to mmap gpio banks: %s\n", strerror(errno));
+		status = errno;
+		goto ret_close;
+	}
+
+ret_close:
+	close(fd);
+	return status;
 }
 
 static void kill_stupid_kernel_led_driver() {

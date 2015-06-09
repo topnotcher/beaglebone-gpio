@@ -41,7 +41,7 @@ typedef struct {
 #define CM_OFFSET 0x44E00000
 
 // size to mmap()
-#define CM_PER_SIZE getpagesize()
+#define CM_PER_SIZE sysconf(_SC_PAGESIZE)
 #define CM_WKUP_OFFSET 0x0100
 
 // offsets relative to CM_OFFSET
