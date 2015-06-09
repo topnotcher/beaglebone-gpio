@@ -24,7 +24,7 @@ static void leds_off(void);
 #define LED_GPIO_BANK 1
 #define LED_USER0_BIT 21
 
-GPIO_t  *gpio[GPIO_NUM_BANKS];
+GPIO_t *gpio[GPIO_NUM_BANKS];
 volatile sig_atomic_t running = 1;
 
 int main (void) {
